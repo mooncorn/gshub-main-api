@@ -41,6 +41,10 @@ func NewInstanceClient(ctx context.Context) (*InstanceClient, error) {
 		return &InstanceClient{}, fmt.Errorf("failed to load AWS config: %v", err)
 	}
 
+	if localStackEndpoint := os.Getenv("LOCALSTACK_ENDPOINT"); localStackEndpoint != "" {
+		cfg.BaseEndpoint = aws.String(localStackEndpoint)
+	}
+
 	return &InstanceClient{ec2: ec2.NewFromConfig(cfg)}, nil
 }
 
@@ -204,8 +208,8 @@ func (c *InstanceClient) StopInstance(ctx context.Context, instanceId string) er
 }
 
 func buildDockerRunCommand(opts *ContainerOptions) string {
-	// Read the wait-for-docker script file
-	data, err := os.ReadFile("./scripts/wait-for-docker.sh")
+	// Read the server-setup script file
+	data, err := os.ReadFile("./scripts/server-setup.sh")
 	if err != nil {
 		log.Fatalf("Failed to read script file: %v", err)
 	}
@@ -217,7 +221,7 @@ func buildDockerRunCommand(opts *ContainerOptions) string {
 	cmd.WriteString(fileContent)
 
 	// Start with the basic Docker run command
-	cmd.WriteString("\ndocker run -d --name main")
+	cmd.WriteString("\nsudo docker run -d --name main")
 
 	// Append environment variables
 	for _, env := range opts.Env {
