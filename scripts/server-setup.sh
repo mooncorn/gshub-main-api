@@ -21,5 +21,8 @@ until is_docker_ready; do
     sleep 1
 done
 
-# Run server-api
-sudo docker run -d -p 3001:3001 --name server-api -v /var/run/docker.sock:/var/run/docker.sock dasior/server-api
+# Get the instance ID
+INSTANCE_ID=$(ec2-metadata -i | cut -d ' ' -f 2)
+
+# Run api
+sudo docker run -d -p 3001:3001 --name api -v /var/run/docker.sock:/var/run/docker.sock -e INSTANCE_ID="$INSTANCE_ID" dasior/server-api

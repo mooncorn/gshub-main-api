@@ -1,11 +1,9 @@
-package aws
+package internal
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
@@ -48,13 +46,18 @@ func NewInstanceClient(ctx context.Context) (*InstanceClient, error) {
 	return &InstanceClient{ec2: ec2.NewFromConfig(cfg)}, nil
 }
 
-func (c *InstanceClient) CreateInstance(ctx context.Context, instanceType types.InstanceType, opts *ContainerOptions) (*Instance, error) {
+func (c *InstanceClient) CreateInstance(ctx context.Context, instanceType types.InstanceType) (*Instance, error) {
 	imageId := os.Getenv("AWS_IMAGE_ID_BASE")
 	keyName := os.Getenv("AWS_KEY_PAIR_NAME")
 
-	cmd := buildDockerRunCommand(opts)
-	// Base64-encode the user data script
-	encodedUserData := base64.StdEncoding.EncodeToString([]byte(cmd))
+	// Read the server-setup script file
+	data, err := os.ReadFile("./scripts/server-setup.sh")
+	if err != nil {
+		return &Instance{}, fmt.Errorf("failed to read script file: %v", err)
+	}
+
+	// Convert the file contents to a string
+	fileContent := string(data)
 
 	runInstancesInput := &ec2.RunInstancesInput{
 		ImageId:      &imageId,
@@ -62,7 +65,7 @@ func (c *InstanceClient) CreateInstance(ctx context.Context, instanceType types.
 		MinCount:     aws.Int32(1),
 		MaxCount:     aws.Int32(1),
 		KeyName:      &keyName,
-		UserData:     aws.String(encodedUserData),
+		UserData:     aws.String(fileContent),
 	}
 
 	result, err := c.ec2.RunInstances(ctx, runInstancesInput)
@@ -208,20 +211,10 @@ func (c *InstanceClient) StopInstance(ctx context.Context, instanceId string) er
 }
 
 func buildDockerRunCommand(opts *ContainerOptions) string {
-	// Read the server-setup script file
-	data, err := os.ReadFile("./scripts/server-setup.sh")
-	if err != nil {
-		log.Fatalf("Failed to read script file: %v", err)
-	}
-
-	// Convert the file contents to a string
-	fileContent := string(data)
-
 	var cmd strings.Builder
-	cmd.WriteString(fileContent)
 
 	// Start with the basic Docker run command
-	cmd.WriteString("\nsudo docker run -d --name main")
+	cmd.WriteString("sudo docker run -d --name main")
 
 	// Append environment variables
 	for _, env := range opts.Env {

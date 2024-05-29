@@ -27,7 +27,7 @@ func main() {
 	db.SetDatabase(gormDB)
 
 	// AutoMigrate the models
-	err = db.GetDatabase().GetDB().AutoMigrate(&models.Plan{}, &models.Service{}, &models.Server{}, &models.User{})
+	err = db.GetDatabase().GetDB().AutoMigrate(&models.Plan{}, &models.Service{}, &models.Server{}, &models.User{}, &models.ServiceEnv{}, &models.ServiceEnvValue{}, &models.ServicePort{}, &models.ServiceVolume{})
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
@@ -46,10 +46,14 @@ func main() {
 	r.POST("/signin", handlers.SignIn)
 	r.GET("/user", middlewares.RequireUser, handlers.GetUser)
 
+	r.Use(middlewares.RequireUser)
+
 	// Protected routes
-	r.GET("/metadata", middlewares.RequireUser, handlers.GetMetadata)
-	r.POST("/instances", middlewares.RequireUser, handlers.CreateInstance)
-	r.GET("/instances", middlewares.RequireUser, handlers.GetInstances)
+	r.GET("/metadata", handlers.GetMetadata)
+	r.POST("/servers", handlers.CreateInstance)
+	r.GET("/servers", handlers.GetInstances)
+
+	r.GET("/services/:id", handlers.GetService)
 
 	r.Run(":" + port)
 }

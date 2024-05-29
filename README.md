@@ -73,3 +73,12 @@ Web server that manages AWS EC2 instances, plans and services.
 - ServiceID: string
 - PlanID: uid
 - UserID: uid
+
+### ImageEnv
+
+- ID: uid
+- Name: string
+- Required: boolean
+- Description: string
+- Default: string
+- Category: string

@@ -2,20 +2,19 @@ package handlers
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/gin-gonic/gin"
 	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
-	"github.com/mooncorn/gshub-main-api/aws"
+	"github.com/mooncorn/gshub-main-api/internal"
 )
 
 func CreateInstance(c *gin.Context) {
 	// Request structure for binding JSON input
 	var request struct {
-		PlanID    int `json:"PlanID"`
-		ServiceID int `json:"ServiceID"`
+		PlanID    int `json:"planId"`
+		ServiceID int `json:"serviceId"`
 	}
 
 	// Bind JSON input to the request structure
@@ -49,18 +48,13 @@ func CreateInstance(c *gin.Context) {
 	}
 
 	// Create new instance AWS EC2 instance
-	ec2InstanceClient, err := aws.NewInstanceClient(c)
+	ec2InstanceClient, err := internal.NewInstanceClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create instance client"})
 		return
 	}
 
-	ec2Instance, err := ec2InstanceClient.CreateInstance(c, types.InstanceType(plan.InstanceType), &aws.ContainerOptions{
-		Image:  service.Image,
-		Env:    strings.Split(service.Env, ","),
-		Volume: service.Volume,
-		Ports:  strings.Split(service.Ports, ","),
-	})
+	ec2Instance, err := ec2InstanceClient.CreateInstance(c, types.InstanceType(plan.InstanceType))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Could not create instance", "details": err.Error()})
 		return
@@ -100,7 +94,7 @@ func GetInstances(c *gin.Context) {
 		return
 	}
 
-	instanceClient, err := aws.NewInstanceClient(c)
+	instanceClient, err := internal.NewInstanceClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
 		return
@@ -113,7 +107,7 @@ func GetInstances(c *gin.Context) {
 
 	instances, err := instanceClient.GetInstances(c, instanceIds)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get instances"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get instances", "details": err.Error()})
 		return
 	}
 

@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
-	"github.com/mooncorn/gshub-main-api/aws"
+	"github.com/mooncorn/gshub-main-api/internal"
 )
 
 // Returns user (if token is valid), a list of services, and plans.
@@ -42,7 +42,7 @@ func GetMetadata(c *gin.Context) {
 	}
 
 	// Get instances
-	ec2InstanceClient, err := aws.NewInstanceClient(c)
+	ec2InstanceClient, err := internal.NewInstanceClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create instance client"})
 		return
@@ -55,12 +55,11 @@ func GetMetadata(c *gin.Context) {
 
 	instances, err := ec2InstanceClient.GetInstances(c, instanceIds)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get instances"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get instances", "details": err.Error()})
 		return
 	}
 
-	instancesMap := make(map[string]aws.Instance)
-	// Iterate over the array and populate the map
+	instancesMap := make(map[string]internal.Instance)
 	for _, i := range instances {
 		instancesMap[i.Id] = i
 	}
