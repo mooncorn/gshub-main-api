@@ -44,11 +44,11 @@ func main() {
 
 	// Public routes
 	r.POST("/signin", handlers.SignIn)
-	r.GET("/user", middlewares.RequireUser, handlers.GetUser)
 
 	r.Use(middlewares.RequireUser)
 
 	// Protected routes
+	r.GET("/user", handlers.GetUser)
 	r.GET("/metadata", handlers.GetMetadata)
 	r.POST("/servers", handlers.CreateInstance)
 	r.GET("/servers", handlers.GetInstances)
