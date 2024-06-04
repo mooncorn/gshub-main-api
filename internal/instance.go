@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -51,13 +52,13 @@ func (c *InstanceClient) CreateInstance(ctx context.Context, instanceType types.
 	keyName := os.Getenv("AWS_KEY_PAIR_NAME")
 
 	// Read the server-setup script file
-	data, err := os.ReadFile("./scripts/server-setup.sh")
+	data, err := os.ReadFile("./scripts/instance-setup.sh")
 	if err != nil {
 		return &Instance{}, fmt.Errorf("failed to read script file: %v", err)
 	}
 
 	// Convert the file contents to a string
-	fileContent := string(data)
+	encoded := base64.StdEncoding.EncodeToString(data)
 
 	runInstancesInput := &ec2.RunInstancesInput{
 		ImageId:      &imageId,
@@ -65,7 +66,7 @@ func (c *InstanceClient) CreateInstance(ctx context.Context, instanceType types.
 		MinCount:     aws.Int32(1),
 		MaxCount:     aws.Int32(1),
 		KeyName:      &keyName,
-		UserData:     aws.String(fileContent),
+		UserData:     aws.String(encoded),
 	}
 
 	result, err := c.ec2.RunInstances(ctx, runInstancesInput)
