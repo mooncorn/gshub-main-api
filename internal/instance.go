@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/mooncorn/gshub-main-api/config"
 )
 
 type Instance struct {
@@ -35,21 +36,21 @@ type ContainerOptions struct {
 }
 
 func NewInstanceClient(ctx context.Context) (*InstanceClient, error) {
-	cfg, err := config.LoadDefaultConfig(ctx)
+	cfg, err := awsConfig.LoadDefaultConfig(ctx)
 	if err != nil {
 		return &InstanceClient{}, fmt.Errorf("failed to load AWS config: %v", err)
 	}
 
-	if localStackEndpoint := os.Getenv("LOCALSTACK_ENDPOINT"); localStackEndpoint != "" {
-		cfg.BaseEndpoint = aws.String(localStackEndpoint)
+	if config.Env.LocalStackEndpoint != "" {
+		cfg.BaseEndpoint = aws.String(config.Env.LocalStackEndpoint)
 	}
 
 	return &InstanceClient{ec2: ec2.NewFromConfig(cfg)}, nil
 }
 
 func (c *InstanceClient) CreateInstance(ctx context.Context, instanceType types.InstanceType) (*Instance, error) {
-	imageId := os.Getenv("AWS_IMAGE_ID_BASE")
-	keyName := os.Getenv("AWS_KEY_PAIR_NAME")
+	imageId := config.Env.AWSImageIdBase
+	keyName := config.Env.AWSKeyPairName
 
 	// Read the server-setup script file
 	data, err := os.ReadFile("./scripts/instance-setup.sh")

@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
+	"github.com/mooncorn/gshub-main-api/config"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -60,7 +60,7 @@ func SignIn(c *gin.Context) {
 	}
 
 	// Validate the ID token
-	payload, err := idtoken.Validate(c, request.IDToken, os.Getenv("GOOGLE_CLIENT_ID"))
+	payload, err := idtoken.Validate(c, request.IDToken, config.Env.GoogleClientId)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 		return
@@ -110,7 +110,7 @@ func SignIn(c *gin.Context) {
 	})
 
 	// Sign the token with the secret key
-	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	tokenString, err := token.SignedString([]byte(config.Env.JWTSecret))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
 		return
