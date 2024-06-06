@@ -25,4 +25,4 @@ done
 INSTANCE_ID=$(ec2-metadata -i | cut -d ' ' -f 2)
 
 # Run api
-sudo docker run --restart always -d -p 3001:3001 --name api -v /var/run/docker.sock:/var/run/docker.sock -e INSTANCE_ID="$INSTANCE_ID" dasior/server-api
+sudo docker run --restart always -d -p 3001:3001 --name api -v /var/run/docker.sock:/var/run/docker.sock -e INSTANCE_ID="$INSTANCE_ID" -e APP_ENV="production" dasior/server-api
