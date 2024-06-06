@@ -29,21 +29,21 @@ func CreateInstance(c *gin.Context) {
 	dbInstance := db.GetDatabase()
 	var user models.User
 	if err := dbInstance.GetDB().Where(&models.User{Email: email}).First(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user"})
 		return
 	}
 
 	// Get Plan
 	var plan models.Plan
 	if err := dbInstance.GetDB().First(&plan, request.PlanID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid plan"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid plan"})
 		return
 	}
 
 	// Get Service
 	var service models.Service
 	if err := dbInstance.GetDB().First(&service, request.ServiceID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid service"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service"})
 		return
 	}
 
