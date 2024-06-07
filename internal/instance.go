@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmTypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/mooncorn/gshub-main-api/config"
 )
 
@@ -24,6 +25,7 @@ type Instance struct {
 	PublicIp   string    `json:"publicIp"`
 	State      string    `json:"state"`
 	Setup      string    `json:"setup"`
+	// Ready      bool      `json:"ready"`
 }
 
 type InstanceClient struct {
@@ -106,6 +108,7 @@ func (c *InstanceClient) GetInstances(ctx context.Context, instanceIds []string)
 
 		setupState := "unknown"
 		publicIp := ""
+		// ready := false
 
 		if i.State.Name == types.InstanceStateNameRunning {
 			// Set public ip address
@@ -116,6 +119,14 @@ func (c *InstanceClient) GetInstances(ctx context.Context, instanceIds []string)
 			if err != nil {
 				setupState = "error"
 			}
+
+			// Check api ready
+			// if i.State.Name == types.InstanceStateNameRunning {
+			// 	ready, err = c.HealthCheckInstanceAPI(ctx, *i.InstanceId)
+			// 	if err != nil {
+			// 		ready = false
+			// 	}
+			// }
 		}
 
 		instances = append(instances, Instance{
@@ -125,6 +136,7 @@ func (c *InstanceClient) GetInstances(ctx context.Context, instanceIds []string)
 			State:      string(i.State.Name),
 			PublicIp:   publicIp,
 			Setup:      setupState,
+			// Ready:      ready,
 		})
 	}
 
@@ -224,6 +236,66 @@ func (c *InstanceClient) StopInstance(ctx context.Context, instanceId string) er
 	return nil
 }
 
+func (c *InstanceClient) HealthCheckInstanceAPI(ctx context.Context, instanceId string) (bool, error) {
+	cfg, err := awsConfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		return false, fmt.Errorf("unable to load SDK config, %v", err)
+	}
+
+	ssmClient := ssm.NewFromConfig(cfg)
+
+	// Make sure SSM is ready by executing checkSetupStatus function
+	status, err := c.checkSetupStatus(ctx, instanceId)
+	if err != nil {
+		return false, fmt.Errorf("unable to check setup status: %v", err)
+	}
+
+	if status != "complete" {
+		return false, fmt.Errorf("setup is not complete, current status: %v", status)
+	}
+
+	// Use SSM to execute a script which pings the API at localhost:3001
+	commandInput := &ssm.SendCommandInput{
+		InstanceIds:  []string{instanceId},
+		DocumentName: aws.String("AWS-RunShellScript"),
+		Parameters: map[string][]string{
+			"commands": {
+				"curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/ || echo '0'",
+			},
+		},
+	}
+
+	commandOutput, err := ssmClient.SendCommand(ctx, commandInput)
+	if err != nil {
+		return false, fmt.Errorf("unable to send command, %v", err)
+	}
+
+	commandId := *commandOutput.Command.CommandId
+
+	// Wait for command to execute using ssm.NewCommandExecutedWaiter
+	waiter := ssm.NewCommandExecutedWaiter(ssmClient)
+	waiterInput := &ssm.GetCommandInvocationInput{
+		CommandId:  aws.String(commandId),
+		InstanceId: aws.String(instanceId),
+	}
+
+	err = waiter.Wait(ctx, waiterInput, time.Minute)
+	if err != nil {
+		return false, fmt.Errorf("waiting for command execution failed: %v", err)
+	}
+
+	// Retrieve command output
+	output, err := ssmClient.GetCommandInvocation(ctx, waiterInput)
+	if err != nil {
+		return false, fmt.Errorf("unable to get command output, %v", err)
+	}
+
+	fmt.Println(*output.StandardOutputContent)
+
+	// Return a flag indicating API status
+	return strings.TrimSpace(*output.StandardOutputContent) == "200", nil
+}
+
 func buildDockerRunCommand(opts *ContainerOptions) string {
 	var cmd strings.Builder
 
@@ -261,7 +333,7 @@ func (c *InstanceClient) checkSetupStatus(ctx context.Context, instanceId string
 
 	commandInput := &ssm.ListCommandInvocationsInput{
 		InstanceId: aws.String(instanceId),
-		MaxResults: aws.Int32(1),
+		MaxResults: aws.Int32(10),
 	}
 
 	commandOutput, err := ssmClient.ListCommandInvocations(ctx, commandInput)
@@ -273,7 +345,14 @@ func (c *InstanceClient) checkSetupStatus(ctx context.Context, instanceId string
 		return "not started", nil
 	}
 
-	lastCommand := commandOutput.CommandInvocations[0]
+	// Find the most recent command invocation
+	var lastCommand *ssmTypes.CommandInvocation
+	for _, cmd := range commandOutput.CommandInvocations {
+		if lastCommand == nil || cmd.RequestedDateTime.After(*lastCommand.RequestedDateTime) {
+			lastCommand = &cmd
+		}
+	}
+
 	switch lastCommand.Status {
 	case "InProgress", "Pending":
 		return "in progress", nil
