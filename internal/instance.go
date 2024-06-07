@@ -13,6 +13,7 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/mooncorn/gshub-main-api/config"
 )
 
@@ -22,6 +23,7 @@ type Instance struct {
 	LaunchTime time.Time `json:"launchTime"`
 	PublicIp   string    `json:"publicIp"`
 	State      string    `json:"state"`
+	Setup      string    `json:"setup"`
 }
 
 type InstanceClient struct {
@@ -102,9 +104,18 @@ func (c *InstanceClient) GetInstances(ctx context.Context, instanceIds []string)
 	for _, r := range result.Reservations {
 		i := r.Instances[0]
 
+		setupState := "unknown"
 		publicIp := ""
+
 		if i.State.Name == types.InstanceStateNameRunning {
+			// Set public ip address
 			publicIp = *i.PublicIpAddress
+
+			// Check setup state
+			setupState, err = c.checkSetupStatus(ctx, *i.InstanceId)
+			if err != nil {
+				setupState = "error"
+			}
 		}
 
 		instances = append(instances, Instance{
@@ -113,6 +124,7 @@ func (c *InstanceClient) GetInstances(ctx context.Context, instanceIds []string)
 			LaunchTime: *i.LaunchTime,
 			State:      string(i.State.Name),
 			PublicIp:   publicIp,
+			Setup:      setupState,
 		})
 	}
 
@@ -237,4 +249,39 @@ func buildDockerRunCommand(opts *ContainerOptions) string {
 	cmd.WriteString(fmt.Sprintf(" %s", opts.Image))
 
 	return cmd.String()
+}
+
+func (c *InstanceClient) checkSetupStatus(ctx context.Context, instanceId string) (string, error) {
+	cfg, err := awsConfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		return "", fmt.Errorf("unable to load SDK config, %v", err)
+	}
+
+	ssmClient := ssm.NewFromConfig(cfg)
+
+	commandInput := &ssm.ListCommandInvocationsInput{
+		InstanceId: aws.String(instanceId),
+		MaxResults: aws.Int32(1),
+	}
+
+	commandOutput, err := ssmClient.ListCommandInvocations(ctx, commandInput)
+	if err != nil {
+		return "", fmt.Errorf("unable to list command invocations, %v", err)
+	}
+
+	if len(commandOutput.CommandInvocations) == 0 {
+		return "not started", nil
+	}
+
+	lastCommand := commandOutput.CommandInvocations[0]
+	switch lastCommand.Status {
+	case "InProgress", "Pending":
+		return "in progress", nil
+	case "Success":
+		return "complete", nil
+	case "Failed", "Cancelled", "TimedOut":
+		return "failed", nil
+	}
+
+	return "unknown", nil
 }

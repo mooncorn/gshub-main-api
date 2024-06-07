@@ -111,5 +111,10 @@ func GetInstances(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, instances)
+	instancesMap := make(map[string]internal.Instance)
+	for _, i := range instances {
+		instancesMap[i.Id] = i
+	}
+
+	c.JSON(http.StatusOK, gin.H{"count": len(servers), "instances": instancesMap, "servers": servers})
 }
