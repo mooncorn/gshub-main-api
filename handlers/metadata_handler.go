@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
+	"github.com/mooncorn/gshub-main-api/config"
 	"github.com/mooncorn/gshub-main-api/internal"
 )
 
@@ -65,10 +66,11 @@ func GetMetadata(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"user":      user,
-		"services":  services,
-		"plans":     plans,
-		"servers":   servers,
-		"instances": instancesMap,
+		"user":                   user,
+		"services":               services,
+		"plans":                  plans,
+		"servers":                servers,
+		"instances":              instancesMap,
+		"latestServerAPIVersion": config.Env.LatestServerAPIVersion,
 	})
 }

@@ -52,6 +52,50 @@ func NewInstanceClient(ctx context.Context) (*InstanceClient, error) {
 	return &InstanceClient{ec2: ec2.NewFromConfig(cfg)}, nil
 }
 
+func (c *InstanceClient) TerminateInstances(ctx context.Context, instanceIds []string) error {
+	_, err := c.ec2.TerminateInstances(ctx, &ec2.TerminateInstancesInput{
+		InstanceIds: instanceIds,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to terminate instances, %v", err)
+	}
+
+	return nil
+}
+
+func (c *InstanceClient) RebootInstances(ctx context.Context, instanceIds []string) error {
+	_, err := c.ec2.RebootInstances(ctx, &ec2.RebootInstancesInput{
+		InstanceIds: instanceIds,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to reboot instances, %v", err)
+	}
+
+	return nil
+}
+
+func (c *InstanceClient) StartInstances(ctx context.Context, instanceIds []string) error {
+	_, err := c.ec2.StartInstances(ctx, &ec2.StartInstancesInput{
+		InstanceIds: instanceIds,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start instances, %v", err)
+	}
+
+	return nil
+}
+
+func (c *InstanceClient) StopInstances(ctx context.Context, instanceIds []string) error {
+	_, err := c.ec2.StopInstances(ctx, &ec2.StopInstancesInput{
+		InstanceIds: instanceIds,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to stop instances, %v", err)
+	}
+
+	return nil
+}
+
 func (c *InstanceClient) CreateInstance(ctx context.Context, instanceType types.InstanceType) (*Instance, error) {
 	imageId := config.Env.AWSImageIdBase
 	keyName := config.Env.AWSKeyPairName
@@ -363,4 +407,29 @@ func (c *InstanceClient) checkSetupStatus(ctx context.Context, instanceId string
 	}
 
 	return "unknown", nil
+}
+
+func (c *InstanceClient) GetRunningInstances(ctx context.Context) ([]string, error) {
+	input := &ec2.DescribeInstancesInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("instance-state-name"),
+				Values: []string{"running"},
+			},
+		},
+	}
+
+	result, err := c.ec2.DescribeInstances(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe instances: %v", err)
+	}
+
+	var instanceIds []string
+	for _, reservation := range result.Reservations {
+		for _, instance := range reservation.Instances {
+			instanceIds = append(instanceIds, *instance.InstanceId)
+		}
+	}
+
+	return instanceIds, nil
 }

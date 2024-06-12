@@ -26,6 +26,8 @@ type Environment struct {
 	GoogleClientSecret string
 
 	LocalStackEndpoint string
+
+	LatestServerAPIVersion string
 }
 
 func LoadEnv() {
@@ -65,5 +67,7 @@ func LoadEnv() {
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 
 		LocalStackEndpoint: os.Getenv("LOCALSTACK_ENDPOINT"),
+
+		LatestServerAPIVersion: os.Getenv("LATEST_SERVER_API_VERSION"),
 	}
 }

@@ -1,14 +1,74 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/gin-gonic/gin"
 	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-main-api/internal"
 )
+
+func RebootInstance(c *gin.Context) {
+	instanceId := c.Param("id")
+
+	instanceClient, err := internal.NewInstanceClient(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		return
+	}
+
+	err = instanceClient.RebootInstances(c, []string{instanceId})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to reboot instance", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "Reboot initiated", "instanceId": instanceId})
+}
+
+func StartInstance(c *gin.Context) {
+	instanceId := c.Param("id")
+
+	instanceClient, err := internal.NewInstanceClient(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		return
+	}
+
+	err = instanceClient.StartInstances(c, []string{instanceId})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to start instance", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "Start initiated", "instanceId": instanceId})
+}
+
+func StopInstance(c *gin.Context) {
+	instanceId := c.Param("id")
+
+	instanceClient, err := internal.NewInstanceClient(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		return
+	}
+
+	err = instanceClient.StopInstances(c, []string{instanceId})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to stop instance", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "Stop initiated", "instanceId": instanceId})
+}
 
 func CreateInstance(c *gin.Context) {
 	// Request structure for binding JSON input
@@ -76,6 +136,31 @@ func CreateInstance(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"server": server})
 }
 
+func TerminateInstance(c *gin.Context) {
+	instanceId := c.Param("id")
+
+	instanceClient, err := internal.NewInstanceClient(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		return
+	}
+
+	err = instanceClient.TerminateInstances(c, []string{instanceId})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to terminate instance", "details": err.Error()})
+		return
+	}
+
+	dbInstance := db.GetDatabase()
+
+	if err = dbInstance.GetDB().Where(&models.Server{InstanceID: instanceId}).Delete(&models.Server{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to delete instance", "details": err.Error()})
+		return
+	}
+
+	c.Status(http.StatusOK)
+}
+
 func GetInstances(c *gin.Context) {
 	email := c.GetString("userEmail")
 
@@ -117,4 +202,71 @@ func GetInstances(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"count": len(servers), "instances": instancesMap, "servers": servers})
+}
+
+func UpdateServerAPIs(c *gin.Context) {
+	instanceClient, err := internal.NewInstanceClient(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		return
+	}
+
+	instanceIds, err := instanceClient.GetRunningInstances(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get running instances", "details": err.Error()})
+		return
+	}
+
+	if len(instanceIds) == 0 {
+		c.JSON(http.StatusOK, gin.H{"status": "No running instances found"})
+		return
+	}
+
+	cfg, err := config.LoadDefaultConfig(c)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to load SDK config", "details": err.Error()})
+		return
+	}
+
+	ssmClient := ssm.NewFromConfig(cfg)
+
+	data, err := os.ReadFile("./scripts/instance-update.sh")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to read instance-update script", "details": err.Error()})
+		return
+	}
+
+	commandInput := &ssm.SendCommandInput{
+		InstanceIds:  instanceIds,
+		DocumentName: aws.String("AWS-RunShellScript"),
+		Parameters: map[string][]string{
+			"commands": {string(data)},
+		},
+	}
+
+	commandOutput, err := ssmClient.SendCommand(c, commandInput)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send command to instances", "details": err.Error()})
+		return
+	}
+
+	commandId := *commandOutput.Command.CommandId
+
+	// Wait for the command to execute using ssm.NewCommandExecutedWaiter
+	waiter := ssm.NewCommandExecutedWaiter(ssmClient)
+	waiterInput := &ssm.GetCommandInvocationInput{
+		CommandId: aws.String(commandId),
+	}
+
+	// Wait for all instances
+	for _, instanceId := range instanceIds {
+		waiterInput.InstanceId = aws.String(instanceId)
+		err = waiter.Wait(c, waiterInput, 10*time.Minute)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to wait for command execution on instance %s", instanceId), "details": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "API update initiated on all running instances"})
 }

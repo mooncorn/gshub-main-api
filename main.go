@@ -58,10 +58,17 @@ func main() {
 	// Protected routes
 	r.GET("/user", handlers.GetUser)
 	r.GET("/metadata", handlers.GetMetadata)
-	r.POST("/servers", handlers.CreateInstance)
-	r.GET("/servers", handlers.GetInstances)
+
+	r.POST("/instances", handlers.CreateInstance)
+	r.GET("/instances", handlers.GetInstances)
+	r.DELETE("/instances/:id", handlers.TerminateInstance)
+	r.POST("/instances/:id/start", handlers.StartInstance)
+	r.POST("/instances/:id/stop", handlers.StopInstance)
 
 	r.GET("/services/:id", handlers.GetService)
+
+	// TODO: Require ADMIN role
+	r.POST("/instances/update-server-apis", handlers.UpdateServerAPIs)
 
 	r.Run(":" + config.Env.Port)
 }
