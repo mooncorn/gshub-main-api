@@ -1,122 +1,109 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"os"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/gin-gonic/gin"
-	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
-	"github.com/mooncorn/gshub-main-api/internal"
+	"github.com/mooncorn/gshub-core/utils"
+	ctx "github.com/mooncorn/gshub-main-api/context"
+	"github.com/mooncorn/gshub-main-api/dto"
+	"github.com/mooncorn/gshub-main-api/instance"
 )
 
-func RebootInstance(c *gin.Context) {
-	instanceId := c.Param("id")
-
-	instanceClient, err := internal.NewInstanceClient(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
-		return
-	}
-
-	err = instanceClient.RebootInstances(c, []string{instanceId})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to reboot instance", "details": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "Reboot initiated", "instanceId": instanceId})
+// The payload for creating an instance
+type CreateInstanceRequestBody struct {
+	PlanID    int `json:"planId" binding:"required"`
+	ServiceID int `json:"serviceId" binding:"required"`
 }
 
-func StartInstance(c *gin.Context) {
-	instanceId := c.Param("id")
+// Start user's instance based on the provided server ID.
+func StartInstance(c *gin.Context, appCtx *ctx.AppContext) {
+	serverId := c.Param("id")
+	userEmail := c.GetString("userEmail")
 
-	instanceClient, err := internal.NewInstanceClient(c)
+	// Check if the server exists
+	server, err := appCtx.ServerRepository.GetServerByServerIDAndUserEmail(serverId, userEmail)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		utils.HandleError(c, http.StatusNotFound, "Server not found", err, userEmail)
 		return
 	}
 
-	err = instanceClient.StartInstances(c, []string{instanceId})
+	// Start the instance
+	err = appCtx.InstanceClient.StartInstances(c, []string{server.InstanceID})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to start instance", "details": err.Error()})
+		utils.HandleError(c, http.StatusBadRequest, "Unable to start instance", err, userEmail)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "Start initiated", "instanceId": instanceId})
+	c.Status(http.StatusOK)
 }
 
-func StopInstance(c *gin.Context) {
-	instanceId := c.Param("id")
+// Stop user's instance based on the provided server ID.
+func StopInstance(c *gin.Context, appCtx *ctx.AppContext) {
+	serverId := c.Param("id")
+	userEmail := c.GetString("userEmail")
 
-	instanceClient, err := internal.NewInstanceClient(c)
+	// Check if the server exists
+	server, err := appCtx.ServerRepository.GetServerByServerIDAndUserEmail(serverId, userEmail)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		utils.HandleError(c, http.StatusNotFound, "Server not found", err, userEmail)
 		return
 	}
 
-	err = instanceClient.StopInstances(c, []string{instanceId})
+	// Stop the instance
+	err = appCtx.InstanceClient.StopInstances(c, []string{server.InstanceID})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to stop instance", "details": err.Error()})
+		utils.HandleError(c, http.StatusBadRequest, "Unable to stop instance", err, userEmail)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "Stop initiated", "instanceId": instanceId})
+	c.Status(http.StatusOK)
 }
 
-func CreateInstance(c *gin.Context) {
-	// Request structure for binding JSON input
-	var request struct {
-		PlanID    int `json:"planId"`
-		ServiceID int `json:"serviceId"`
-	}
+// CreateInstance creates a new instance and associates it with the user, plan, and service.
+func CreateInstance(c *gin.Context, appCtx *ctx.AppContext) {
+	var request CreateInstanceRequestBody
 
 	// Bind JSON input to the request structure
 	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		c.JSON(http.StatusBadRequest, utils.ErrorMessage{Error: "Invalid request"})
 		return
 	}
 
-	email := c.GetString("userEmail")
+	userEmail := c.GetString("userEmail")
 
 	// Get User
-	dbInstance := db.GetDatabase()
-	var user models.User
-	if err := dbInstance.GetDB().Where(&models.User{Email: email}).First(&user).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user"})
+	user, err := appCtx.UserRepository.GetUserByEmail(userEmail)
+	if err != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Invalid user", err, userEmail)
 		return
 	}
 
 	// Get Plan
-	var plan models.Plan
-	if err := dbInstance.GetDB().First(&plan, request.PlanID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid plan"})
+	plan, err := appCtx.PlanRepository.GetPlan(request.PlanID)
+	if err != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Invalid plan", err, userEmail)
 		return
 	}
 
 	// Get Service
-	var service models.Service
-	if err := dbInstance.GetDB().First(&service, request.ServiceID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service"})
+	service, err := appCtx.ServiceRepository.GetService(request.ServiceID)
+	if err != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Invalid service", err, userEmail)
 		return
 	}
 
-	// Create new instance AWS EC2 instance
-	ec2InstanceClient, err := internal.NewInstanceClient(c)
+	instanceType, err := instance.ParseInstanceType(plan.InstanceType)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create instance client"})
+		utils.HandleError(c, http.StatusBadRequest, "Invalid instance type", err, userEmail)
 		return
 	}
 
-	ec2Instance, err := ec2InstanceClient.CreateInstance(c, types.InstanceType(plan.InstanceType))
+	ec2Instance, err := appCtx.InstanceClient.CreateInstance(c, &instanceType)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Could not create instance", "details": err.Error()})
+		utils.HandleError(c, http.StatusBadRequest, "Could not create instance", err, userEmail)
 		return
 	}
 
@@ -127,146 +114,76 @@ func CreateInstance(c *gin.Context) {
 		InstanceID: ec2Instance.Id,
 	}
 
-	if err := dbInstance.GetDB().Create(&server).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create server"})
-		ec2InstanceClient.TerminateInstance(c, ec2Instance.Id)
+	if err := appCtx.ServerRepository.CreateServer(&server); err != nil {
+		appCtx.InstanceClient.TerminateInstances(c, []string{ec2Instance.Id})
+		utils.HandleError(c, http.StatusInternalServerError, "Failed to create server", err, userEmail)
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"server": server})
+	serverInstance := dto.NewServerInstance(&server, ec2Instance)
+
+	c.JSON(http.StatusCreated, serverInstance)
 }
 
-func TerminateInstance(c *gin.Context) {
-	instanceId := c.Param("id")
+// TerminateInstance terminates an EC2 instance and deletes its record from the server repository.
+//
+// If the server exists, it proceeds to terminate the instance using the InstanceClient.
+// After successfully terminating the instance, it deletes the corresponding server record
+// from the server repository. If any step fails, an appropriate error response is returned.
+func TerminateInstance(c *gin.Context, appCtx *ctx.AppContext) {
+	serverId := c.Param("id")
+	userEmail := c.GetString("userEmail")
 
-	instanceClient, err := internal.NewInstanceClient(c)
+	// Check if the server exists
+	server, err := appCtx.ServerRepository.GetServerByServerIDAndUserEmail(serverId, userEmail)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		utils.HandleError(c, http.StatusNotFound, "Server not found", err, userEmail)
 		return
 	}
 
-	err = instanceClient.TerminateInstances(c, []string{instanceId})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to terminate instance", "details": err.Error()})
+	// Terminate the instance
+	if err := appCtx.InstanceClient.TerminateInstances(c, []string{server.InstanceID}); err != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Unable to terminate instance", err, userEmail)
 		return
 	}
 
-	dbInstance := db.GetDatabase()
-
-	if err = dbInstance.GetDB().Where(&models.Server{InstanceID: instanceId}).Delete(&models.Server{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to delete instance", "details": err.Error()})
+	// Delete the server record
+	if err := appCtx.ServerRepository.DeleteServer(serverId, userEmail); err != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Unable to delete instance", err, userEmail)
 		return
 	}
 
 	c.Status(http.StatusOK)
 }
 
-func GetInstances(c *gin.Context) {
-	email := c.GetString("userEmail")
+// Updates the APIs on all running instances by executing an update script.
+func UpdateServerAPIs(c *gin.Context, appCtx *ctx.AppContext) {
+	userEmail := c.GetString("userEmail")
 
-	// Get User
-	dbInstance := db.GetDatabase()
-	var user models.User
-	if err := dbInstance.GetDB().Where(&models.User{Email: email}).First(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user"})
-		return
-	}
-
-	// Get servers that belong to the user
-	var servers []models.Server
-	if err := dbInstance.GetDB().Where(&models.Server{UserID: user.ID}).Find(&servers).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch servers"})
-		return
-	}
-
-	instanceClient, err := internal.NewInstanceClient(c)
+	instanceIds, err := appCtx.InstanceClient.GetRunningInstances(c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
+		utils.HandleError(c, http.StatusInternalServerError, "Failed to get running instances", err, userEmail)
 		return
 	}
 
-	var instanceIds []string
-	for _, s := range servers {
-		instanceIds = append(instanceIds, s.InstanceID)
-	}
-
-	instances, err := instanceClient.GetInstances(c, instanceIds)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get instances", "details": err.Error()})
+	if len(*instanceIds) == 0 {
+		c.JSON(http.StatusOK, utils.SuccessMessage{Message: "No running instances found"})
 		return
 	}
-
-	instancesMap := make(map[string]internal.Instance)
-	for _, i := range instances {
-		instancesMap[i.Id] = i
-	}
-
-	c.JSON(http.StatusOK, gin.H{"count": len(servers), "instances": instancesMap, "servers": servers})
-}
-
-func UpdateServerAPIs(c *gin.Context) {
-	instanceClient, err := internal.NewInstanceClient(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create instance client"})
-		return
-	}
-
-	instanceIds, err := instanceClient.GetRunningInstances(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get running instances", "details": err.Error()})
-		return
-	}
-
-	if len(instanceIds) == 0 {
-		c.JSON(http.StatusOK, gin.H{"status": "No running instances found"})
-		return
-	}
-
-	cfg, err := config.LoadDefaultConfig(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to load SDK config", "details": err.Error()})
-		return
-	}
-
-	ssmClient := ssm.NewFromConfig(cfg)
 
 	data, err := os.ReadFile("./scripts/instance-update.sh")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to read instance-update script", "details": err.Error()})
+		utils.HandleError(c, http.StatusInternalServerError, "Unable to read instance-update script", err, userEmail)
 		return
 	}
 
-	commandInput := &ssm.SendCommandInput{
-		InstanceIds:  instanceIds,
-		DocumentName: aws.String("AWS-RunShellScript"),
-		Parameters: map[string][]string{
-			"commands": {string(data)},
-		},
-	}
+	command := string(data)
 
-	commandOutput, err := ssmClient.SendCommand(c, commandInput)
+	err = appCtx.InstanceClient.SendCommand(c, &command, instanceIds)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send command to instances", "details": err.Error()})
+		utils.HandleError(c, http.StatusInternalServerError, "Failed to send command to instances", err, userEmail)
 		return
 	}
 
-	commandId := *commandOutput.Command.CommandId
-
-	// Wait for the command to execute using ssm.NewCommandExecutedWaiter
-	waiter := ssm.NewCommandExecutedWaiter(ssmClient)
-	waiterInput := &ssm.GetCommandInvocationInput{
-		CommandId: aws.String(commandId),
-	}
-
-	// Wait for all instances
-	for _, instanceId := range instanceIds {
-		waiterInput.InstanceId = aws.String(instanceId)
-		err = waiter.Wait(c, waiterInput, 10*time.Minute)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to wait for command execution on instance %s", instanceId), "details": err.Error()})
-			return
-		}
-	}
-
-	c.JSON(http.StatusOK, gin.H{"status": "API update initiated on all running instances"})
+	c.JSON(http.StatusOK, utils.SuccessMessage{Message: "API update initiated on all running instances"})
 }

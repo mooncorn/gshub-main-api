@@ -7,6 +7,7 @@ import (
 	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-main-api/config"
+	ctx "github.com/mooncorn/gshub-main-api/context"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,7 @@ import (
 )
 
 // GetUser retrieves the user information from the database based on the email stored in the context.
-func GetUser(c *gin.Context) {
+func GetUser(c *gin.Context, app *ctx.AppContext) {
 	// Retrieve the user email from the context
 	userEmail, exists := c.Get("userEmail")
 	if !exists {
@@ -47,7 +48,7 @@ func GetUser(c *gin.Context) {
 }
 
 // SignIn handles user sign-in, validates the ID token, and creates or updates the user in the database.
-func SignIn(c *gin.Context) {
+func SignIn(c *gin.Context, app *ctx.AppContext) {
 	// Request structure for binding JSON input
 	var request struct {
 		IDToken string `json:"idToken"`

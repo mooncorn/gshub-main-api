@@ -4,10 +4,11 @@ import (
 	"log"
 	"strings"
 
-	"github.com/mooncorn/gshub-core/db"
+	coreDB "github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/middlewares"
 	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-main-api/config"
+	ctx "github.com/mooncorn/gshub-main-api/context"
 	"github.com/mooncorn/gshub-main-api/handlers"
 
 	"github.com/gin-contrib/cors"
@@ -17,11 +18,11 @@ import (
 func main() {
 	config.LoadEnv()
 
-	gormDB := db.NewGormDB(config.Env.DSN)
-	db.SetDatabase(gormDB)
+	gormDB := coreDB.NewGormDB(config.Env.DSN)
+	coreDB.SetDatabase(gormDB)
 
 	// AutoMigrate the models
-	err := db.GetDatabase().GetDB().AutoMigrate(
+	err := coreDB.GetDatabase().GetDB().AutoMigrate(
 		&models.User{},
 		&models.Plan{},
 		&models.Service{},
@@ -39,6 +40,8 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	appCtx := ctx.NewAppContext(coreDB.GetDatabase().GetDB())
+
 	r := gin.Default()
 
 	// Middlewares
@@ -51,24 +54,23 @@ func main() {
 	r.Use(middlewares.CheckUser)
 
 	// Public routes
-	r.POST("/signin", handlers.SignIn)
+	r.POST("/signin", appCtx.HandlerWrapper(handlers.SignIn))
+	r.GET("/metadata", appCtx.HandlerWrapper(handlers.GetMetadata))
 
 	r.Use(middlewares.RequireUser)
 
 	// Protected routes
-	r.GET("/user", handlers.GetUser)
-	r.GET("/metadata", handlers.GetMetadata)
+	r.GET("/user", appCtx.HandlerWrapper(handlers.GetUser))
 
-	r.POST("/instances", handlers.CreateInstance)
-	r.GET("/instances", handlers.GetInstances)
-	r.DELETE("/instances/:id", handlers.TerminateInstance)
-	r.POST("/instances/:id/start", handlers.StartInstance)
-	r.POST("/instances/:id/stop", handlers.StopInstance)
+	r.POST("/servers", appCtx.HandlerWrapper(handlers.CreateInstance))
+	r.DELETE("/servers/:id", appCtx.HandlerWrapper(handlers.TerminateInstance))
+	r.POST("/servers/:id/start", appCtx.HandlerWrapper(handlers.StartInstance))
+	r.POST("/servers/:id/stop", appCtx.HandlerWrapper(handlers.StopInstance))
 
-	r.GET("/services/:id", handlers.GetService)
+	r.GET("/services/:id", appCtx.HandlerWrapper(handlers.GetService))
 
 	// TODO: Require ADMIN role
-	r.POST("/instances/update-server-apis", handlers.UpdateServerAPIs)
+	r.POST("/servers/update-server-apis", appCtx.HandlerWrapper(handlers.UpdateServerAPIs))
 
 	r.Run(":" + config.Env.Port)
 }

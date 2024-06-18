@@ -10,6 +10,7 @@ import (
 var Env Environment
 
 type Environment struct {
+	AppEnv    string
 	GinMode   string
 	DSN       string
 	URL       string
@@ -51,6 +52,7 @@ func LoadEnv() {
 	}
 
 	Env = Environment{
+		AppEnv:    os.Getenv("APP_ENV"),
 		GinMode:   os.Getenv("GIN_MODE"),
 		DSN:       os.Getenv("DSN"),
 		URL:       os.Getenv("URL"),

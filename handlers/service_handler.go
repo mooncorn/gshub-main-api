@@ -5,13 +5,12 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mooncorn/gshub-core/db"
-	"github.com/mooncorn/gshub-core/models"
+	"github.com/mooncorn/gshub-core/utils"
+	ctx "github.com/mooncorn/gshub-main-api/context"
 )
 
-func GetService(c *gin.Context) {
+func GetService(c *gin.Context, appCtx *ctx.AppContext) {
 	serviceIdStr := c.Param("id")
-	dbInstance := db.GetDatabase()
 
 	// Check if serviceId is a valid integer
 	serviceId, err := strconv.Atoi(serviceIdStr)
@@ -20,12 +19,11 @@ func GetService(c *gin.Context) {
 		return
 	}
 
-	var service models.Service
-
-	if err := dbInstance.GetDB().Model(&models.Service{}).Preload("Env.Values").Preload("Ports").Preload("Volumes").Where(serviceId).First(&service).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Service does not exist", "details": err.Error()})
+	service, err := appCtx.ServiceRepository.GetServicePreloaded(serviceId)
+	if err != nil {
+		utils.HandleError(c, http.StatusInternalServerError, "Cannot get service", err, "null")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"service": service})
+	c.JSON(http.StatusOK, service)
 }
