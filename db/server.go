@@ -26,13 +26,7 @@ func (r *ServerRepository) GetUserServers(userID uint) (*[]models.Server, error)
 func (r *ServerRepository) GetServerByInstanceIDAndUserEmail(instanceID, userEmail string) (*models.Server, error) {
 	var server models.Server
 	err := r.DB.Where("instance_id = ? AND user_id = (SELECT id FROM users WHERE email = ?)", instanceID, userEmail).First(&server).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &server, nil
+	return &server, err
 }
 
 func (r *ServerRepository) GetServerByServerIDAndUserEmail(serverID, userEmail string) (*models.Server, error) {
