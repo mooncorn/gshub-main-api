@@ -1,15 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
-	coreDB "github.com/mooncorn/gshub-core/db"
+	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/middlewares"
 	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-main-api/config"
 	ctx "github.com/mooncorn/gshub-main-api/context"
 	"github.com/mooncorn/gshub-main-api/handlers"
+	"gorm.io/gorm"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -18,29 +20,25 @@ import (
 func main() {
 	config.LoadEnv()
 
-	gormDB := coreDB.NewGormDB(config.Env.DSN)
-	coreDB.SetDatabase(gormDB)
+	// Initialize database
+	gormDB := db.NewPostgresDB(config.Env.DSN, &gorm.Config{})
 
-	// AutoMigrate the models
-	err := coreDB.GetDatabase().GetDB().AutoMigrate(
+	// Auto migrate the models
+	err := gormDB.GetDB().AutoMigrate(
 		&models.User{},
 		&models.Plan{},
 		&models.Service{},
-		&models.ServiceEnv{},
-		&models.ServiceEnvValue{},
-		&models.ServiceVolume{},
-		&models.ServicePort{},
-		&models.Server{},
+		&models.Instance{},
 	)
 	if err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
-	if strings.ToLower(config.Env.GinMode) == "release" {
+	if strings.ToLower(config.Env.AppEnv) == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	appCtx := ctx.NewAppContext(coreDB.GetDatabase().GetDB())
+	appCtx := ctx.NewAppContext(gormDB.GetDB())
 
 	r := gin.Default()
 
@@ -69,8 +67,23 @@ func main() {
 
 	r.GET("/services/:id", appCtx.HandlerWrapper(handlers.GetService))
 
-	// TODO: Require ADMIN role
+	// Admin protected routes
+	r.Use(middlewares.RequireRole(models.UserRoleAdmin))
 	r.POST("/servers/update-server-apis", appCtx.HandlerWrapper(handlers.UpdateServerAPIs))
 
-	r.Run(":" + config.Env.Port)
+	go r.Run(":" + config.Env.Port)
+
+	// API for instances
+	r2 := gin.Default()
+	r2.GET("/startup", appCtx.HandlerWrapper(handleStartupEvent))
+	r2.GET("/shutdown", appCtx.HandlerWrapper(handleShutdownEvent))
+	go r2.Run(":8081")
+}
+
+func handleStartupEvent(c *gin.Context, appCtx *ctx.AppContext) {
+	fmt.Println("startup")
+}
+
+func handleShutdownEvent(c *gin.Context, appCtx *ctx.AppContext) {
+	fmt.Println("shutdown")
 }

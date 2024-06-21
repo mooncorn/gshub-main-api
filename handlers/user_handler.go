@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-main-api/config"
 	ctx "github.com/mooncorn/gshub-main-api/context"
@@ -16,7 +15,7 @@ import (
 )
 
 // GetUser retrieves the user information from the database based on the email stored in the context.
-func GetUser(c *gin.Context, app *ctx.AppContext) {
+func GetUser(c *gin.Context, appCtx *ctx.AppContext) {
 	// Retrieve the user email from the context
 	userEmail, exists := c.Get("userEmail")
 	if !exists {
@@ -32,9 +31,8 @@ func GetUser(c *gin.Context, app *ctx.AppContext) {
 	}
 
 	// Fetch the user information from the database
-	instance := db.GetDatabase()
 	var user models.User
-	if err := instance.GetDB().Where("email = ?", email).First(&user).Error; err != nil {
+	if err := appCtx.DB.Where("email = ?", email).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		} else {
@@ -48,7 +46,7 @@ func GetUser(c *gin.Context, app *ctx.AppContext) {
 }
 
 // SignIn handles user sign-in, validates the ID token, and creates or updates the user in the database.
-func SignIn(c *gin.Context, app *ctx.AppContext) {
+func SignIn(c *gin.Context, appCtx *ctx.AppContext) {
 	// Request structure for binding JSON input
 	var request struct {
 		IDToken string `json:"idToken"`
@@ -77,16 +75,15 @@ func SignIn(c *gin.Context, app *ctx.AppContext) {
 	// Create a new user instance
 	user := models.User{
 		Email: email,
-		Role:  models.Default,
+		Role:  models.UserRoleDefault,
 	}
 
 	// Check if the user already exists in the database
-	instance := db.GetDatabase()
 	var existingUser models.User
-	if err := instance.GetDB().Where("email = ?", user.Email).First(&existingUser).Error; err != nil {
+	if err := appCtx.DB.Where("email = ?", user.Email).First(&existingUser).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			// User does not exist, create a new user
-			if err := instance.GetDB().Create(&user).Error; err != nil {
+			if err := appCtx.DB.Create(&user).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create user"})
 				return
 			}
@@ -97,7 +94,7 @@ func SignIn(c *gin.Context, app *ctx.AppContext) {
 		}
 	} else {
 		// User exists, update the user information
-		if err := instance.GetDB().Model(&existingUser).Updates(user).Error; err != nil {
+		if err := appCtx.DB.Model(&existingUser).Updates(user).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not update user"})
 			return
 		}
@@ -105,6 +102,7 @@ func SignIn(c *gin.Context, app *ctx.AppContext) {
 
 	// Generate JWT token for the user
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"id":    user.ID,
 		"email": user.Email,
 		"role":  user.Role,
 		"exp":   time.Now().Add(time.Hour * 72).Unix(),

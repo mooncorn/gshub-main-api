@@ -12,14 +12,13 @@ import (
 func GetService(c *gin.Context, appCtx *ctx.AppContext) {
 	serviceIdStr := c.Param("id")
 
-	// Check if serviceId is a valid integer
-	serviceId, err := strconv.Atoi(serviceIdStr)
+	serviceID64, err := strconv.ParseUint(serviceIdStr, 10, 32)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service id"})
+		utils.HandleError(c, http.StatusBadRequest, "Invalid service id", err, "")
 		return
 	}
 
-	service, err := appCtx.ServiceRepository.GetServicePreloaded(serviceId)
+	service, err := appCtx.ServiceRepository.GetServicePreloaded(uint(serviceID64))
 	if err != nil {
 		utils.HandleError(c, http.StatusInternalServerError, "Cannot get service", err, "null")
 		return

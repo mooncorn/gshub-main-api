@@ -2,26 +2,28 @@ package context
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/mooncorn/gshub-main-api/db"
+	"github.com/mooncorn/gshub-core/repositories"
 	"github.com/mooncorn/gshub-main-api/instance"
 	"gorm.io/gorm"
 )
 
 type AppContext struct {
-	InstanceClient    *instance.Client
-	UserRepository    *db.UserRepository
-	ServiceRepository *db.ServiceRepository
-	PlanRepository    *db.PlanRepository
-	ServerRepository  *db.ServerRepository
+	DB                 *gorm.DB
+	InstanceClient     *instance.Client
+	UserRepository     *repositories.UserRepository
+	ServiceRepository  *repositories.ServiceRepository
+	PlanRepository     *repositories.PlanRepository
+	InstanceRepository *repositories.InstanceRepository
 }
 
 func NewAppContext(dbInstance *gorm.DB) *AppContext {
 	return &AppContext{
-		InstanceClient:    instance.NewClient(),
-		UserRepository:    db.NewUserRepository(dbInstance),
-		ServiceRepository: db.NewServiceRepository(dbInstance),
-		PlanRepository:    db.NewPlanRepository(dbInstance),
-		ServerRepository:  db.NewServerRepository(dbInstance),
+		DB:                 dbInstance,
+		InstanceClient:     instance.NewClient(),
+		UserRepository:     repositories.NewUserRepository(dbInstance),
+		ServiceRepository:  repositories.NewServiceRepository(dbInstance),
+		PlanRepository:     repositories.NewPlanRepository(dbInstance),
+		InstanceRepository: repositories.NewInstanceRepository(dbInstance),
 	}
 }
 
