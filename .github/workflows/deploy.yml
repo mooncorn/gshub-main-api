@@ -11,7 +11,7 @@ jobs:
 
     steps:
     - name: Print secret names
-      run: echo ${{ secrets }}
+      run: echo ${{ secrets.EC2_KEY_PAIR }}
     
     - name: Checkout code
       uses: actions/checkout@v2
