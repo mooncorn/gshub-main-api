@@ -8,11 +8,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: prod
 
-    steps:
-    - name: Print secret names
-      run: echo ${{ secrets.EC2_KEY_PAIR }}
-    
+    steps:    
     - name: Checkout code
       uses: actions/checkout@v2
 
