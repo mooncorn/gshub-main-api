@@ -2,8 +2,8 @@ package context
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/mooncorn/gshub-core/repositories"
 	"github.com/mooncorn/gshub-main-api/instance"
+	"github.com/mooncorn/gshub-main-api/repositories"
 	"gorm.io/gorm"
 )
 

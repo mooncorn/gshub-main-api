@@ -3,14 +3,17 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/mooncorn/gshub-core/db"
 	"github.com/mooncorn/gshub-core/middlewares"
-	"github.com/mooncorn/gshub-core/models"
+	"github.com/mooncorn/gshub-core/utils"
 	"github.com/mooncorn/gshub-main-api/config"
 	ctx "github.com/mooncorn/gshub-main-api/context"
 	"github.com/mooncorn/gshub-main-api/handlers"
+	"github.com/mooncorn/gshub-main-api/models"
 	"gorm.io/gorm"
 
 	"github.com/gin-contrib/cors"
@@ -68,22 +71,88 @@ func main() {
 	r.GET("/services/:id", appCtx.HandlerWrapper(handlers.GetService))
 
 	// Admin protected routes
-	r.Use(middlewares.RequireRole(models.UserRoleAdmin))
+	r.Use(middlewares.RequireRole("admin"))
 	r.POST("/servers/update-server-apis", appCtx.HandlerWrapper(handlers.UpdateServerAPIs))
 
 	go r.Run(":" + config.Env.Port)
 
 	// API for instances
 	r2 := gin.Default()
-	r2.GET("/startup", appCtx.HandlerWrapper(handleStartupEvent))
-	r2.POST("/shutdown", appCtx.HandlerWrapper(handleShutdownEvent))
+	r2.GET("/startup/:id", appCtx.HandlerWrapper(handleStartupEvent))
+	r2.POST("/shutdown/:id", appCtx.HandlerWrapper(handleShutdownEvent))
 	r2.Run(":8081")
 }
 
 func handleStartupEvent(c *gin.Context, appCtx *ctx.AppContext) {
-	fmt.Println("startup")
+	instanceIDStr := c.Param("id")
+	instanceID64, err := strconv.ParseUint(instanceIDStr, 10, 32)
+	if err != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Invalid instance id", err, instanceIDStr)
+		return
+	}
+
+	// get instance
+	instance, err := appCtx.InstanceRepository.GetInstance(uint(instanceID64))
+	if err != nil {
+		utils.HandleError(c, http.StatusNotFound, "Instance not found", err, instanceIDStr)
+		return
+	}
+
+	// get plan
+	plan, err := appCtx.PlanRepository.GetPlan(instance.PlanID)
+	if err != nil {
+		utils.HandleError(c, http.StatusInternalServerError, "Failed to get plan", err, instanceIDStr)
+		return
+	}
+
+	// get service
+	service, err := appCtx.ServiceRepository.GetService(instance.ServiceID)
+	if err != nil {
+		utils.HandleError(c, http.StatusInternalServerError, "Failed to get service", err, instanceIDStr)
+		return
+	}
+	if appCtx.InstanceRepository.UpdateInstance(uint(instanceID64), true, "") != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Failed to update instance", err, instanceIDStr)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"instanceMemory":               plan.Memory,
+		"serviceNameId":                service.NameID,
+		"serviceImage":                 service.Image,
+		"serviceMinimumMemoryRequired": service.MinMem,
+		"ownerId":                      instance.UserID,
+		"cycles":                       instance.Cycles,
+	})
+}
+
+type EventShutdownData struct {
+	BurnedCycles uint `json:"burnedCycles"`
 }
 
 func handleShutdownEvent(c *gin.Context, appCtx *ctx.AppContext) {
-	fmt.Println("shutdown")
+	instanceIDStr := c.Param("id")
+
+	instanceID64, err := strconv.ParseUint(instanceIDStr, 10, 32)
+	if err != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Invalid instance id", err, instanceIDStr)
+		return
+	}
+
+	var request EventShutdownData
+
+	// Bind JSON input to the request structure
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, utils.ErrorMessage{Error: "Invalid request"})
+		return
+	}
+
+	if appCtx.InstanceRepository.UpdateInstance(uint(instanceID64), false, "") != nil {
+		utils.HandleError(c, http.StatusBadRequest, "Failed to update instance", err, instanceIDStr)
+		return
+	}
+
+	fmt.Printf("Create burned cycles: %d\n", request.BurnedCycles)
+
+	c.Status(http.StatusOK)
 }

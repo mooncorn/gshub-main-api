@@ -6,10 +6,10 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-core/utils"
 	ctx "github.com/mooncorn/gshub-main-api/context"
 	"github.com/mooncorn/gshub-main-api/instance"
+	"github.com/mooncorn/gshub-main-api/models"
 )
 
 // The payload for creating an instance
@@ -30,7 +30,7 @@ func StartInstance(c *gin.Context, appCtx *ctx.AppContext) {
 	}
 
 	// Check if the instance exists
-	instance, err := appCtx.InstanceRepository.GetInstance(uint(instanceID64), userEmail)
+	instance, err := appCtx.InstanceRepository.GetUserInstance(userEmail, uint(instanceID64))
 	if err != nil {
 		utils.HandleError(c, http.StatusNotFound, "Instance not found", err, userEmail)
 		return
@@ -58,7 +58,7 @@ func StopInstance(c *gin.Context, appCtx *ctx.AppContext) {
 	}
 
 	// Check if the instance exists
-	server, err := appCtx.InstanceRepository.GetInstance(uint(instanceID64), userEmail)
+	server, err := appCtx.InstanceRepository.GetUserInstance(userEmail, uint(instanceID64))
 	if err != nil {
 		utils.HandleError(c, http.StatusNotFound, "Instance not found", err, userEmail)
 		return
@@ -152,7 +152,7 @@ func TerminateInstance(c *gin.Context, appCtx *ctx.AppContext) {
 	}
 
 	// Check if the instance exists
-	instance, err := appCtx.InstanceRepository.GetInstance(uint(instanceID64), userEmail)
+	instance, err := appCtx.InstanceRepository.GetUserInstance(userEmail, uint(instanceID64))
 	if err != nil {
 		utils.HandleError(c, http.StatusNotFound, "Instance not found", err, userEmail)
 		return
@@ -165,7 +165,7 @@ func TerminateInstance(c *gin.Context, appCtx *ctx.AppContext) {
 	}
 
 	// Delete the instance record
-	if err := appCtx.InstanceRepository.DeleteInstance(instance.ID, userEmail); err != nil {
+	if err := appCtx.InstanceRepository.DeleteUserInstance(userEmail, instance.ID); err != nil {
 		utils.HandleError(c, http.StatusBadRequest, "Unable to delete instance", err, userEmail)
 		return
 	}

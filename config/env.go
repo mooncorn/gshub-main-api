@@ -33,22 +33,11 @@ type Environment struct {
 
 func LoadEnv() {
 	env := os.Getenv("APP_ENV")
-	var envFile string
-
-	switch env {
-	case "production":
-		envFile = ".env.production"
-	case "development":
-		envFile = ".env.development"
-	default:
-		log.Fatal("APP_ENV has to be set to \"production\" or \"development\"")
-	}
-
 	log.Printf("APP_ENV set to \"%s\"", env)
 
-	err := godotenv.Load(envFile)
+	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("Error loading %s file", envFile)
+		log.Fatal("Error loading .env file")
 	}
 
 	Env = Environment{

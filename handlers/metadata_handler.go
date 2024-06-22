@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-core/utils"
 	ctx "github.com/mooncorn/gshub-main-api/context"
+	"github.com/mooncorn/gshub-main-api/models"
 )
 
 func GetMetadata(c *gin.Context, appCtx *ctx.AppContext) {

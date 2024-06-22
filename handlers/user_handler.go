@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mooncorn/gshub-core/models"
 	"github.com/mooncorn/gshub-main-api/config"
 	ctx "github.com/mooncorn/gshub-main-api/context"
+	"github.com/mooncorn/gshub-main-api/models"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
