@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -35,14 +36,15 @@ func LoadEnv() {
 	env := os.Getenv("APP_ENV")
 	log.Printf("APP_ENV set to \"%s\"", env)
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	if !strings.EqualFold(env, "production") {
+		err := godotenv.Load()
+		if err != nil {
+			log.Fatal("Error loading .env file")
+		}
 	}
 
 	Env = Environment{
 		AppEnv:    os.Getenv("APP_ENV"),
-		GinMode:   os.Getenv("GIN_MODE"),
 		DSN:       os.Getenv("DSN"),
 		URL:       os.Getenv("URL"),
 		Port:      os.Getenv("PORT"),
@@ -58,7 +60,5 @@ func LoadEnv() {
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 
 		LocalStackEndpoint: os.Getenv("LOCALSTACK_ENDPOINT"),
-
-		LatestServerAPIVersion: os.Getenv("LATEST_SERVER_API_VERSION"),
 	}
 }
