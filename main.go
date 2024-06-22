@@ -76,8 +76,8 @@ func main() {
 	// API for instances
 	r2 := gin.Default()
 	r2.GET("/startup", appCtx.HandlerWrapper(handleStartupEvent))
-	r2.GET("/shutdown", appCtx.HandlerWrapper(handleShutdownEvent))
-	go r2.Run(":8081")
+	r2.POST("/shutdown", appCtx.HandlerWrapper(handleShutdownEvent))
+	r2.Run(":8081")
 }
 
 func handleStartupEvent(c *gin.Context, appCtx *ctx.AppContext) {
