@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Print secret names
+      run: echo ${{ secrets }}
+    
     - name: Checkout code
       uses: actions/checkout@v2
 
