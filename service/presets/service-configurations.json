@@ -1,0 +1,82 @@
+{
+  "minecraft": {
+    "name": "",
+    "nameLong": "",
+    "image": "itzg/minecraft-server",
+    "minMem": 1024,
+    "recMem": 2048,
+    "env": [
+      {
+        "name": "Version",
+        "key": "VERSION",
+        "required": false,
+        "description": "The minecraft version",
+        "default": "LATEST",
+        "values": [
+          {
+            "name": "Latest",
+            "value": "LATEST"
+          },
+          {
+            "name": "Vanilla",
+            "value": "VANILLA"
+          },
+          {
+            "name": "1.20.6",
+            "value": "1.20.6"
+          },
+          {
+            "name": "1.20.5",
+            "value": "1.20.5"
+          },
+          {
+            "name": "1.20.4",
+            "value": "1.20.4"
+          },
+          {
+            "name": "1.20.3",
+            "value": "1.20.3"
+          },
+          {
+            "name": "1.20.2",
+            "value": "1.20.2"
+          },
+          {
+            "name": "1.20.1",
+            "value": "1.20.1"
+          }
+        ]
+      },
+      {
+        "name": "Type",
+        "key": "TYPE",
+        "required": false,
+        "description": "The minecraft type",
+        "default": "VANILLA",
+        "values": [
+          {
+            "name": "Vanilla",
+            "value": "VANILLA"
+          },
+          {
+            "name": "Spigot",
+            "value": "SPIGOT"
+          }
+        ]
+      }
+    ],
+    "ports": [
+      {
+        "host": 25565,
+        "container": 25565,
+        "protocol": "tcp"
+      }
+    ],
+    "volumes": [
+      {
+        "host": "/minecraft/data",
+        "destination": "/data"
+      }
+    ]
+  }
+}
